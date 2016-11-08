@@ -10,6 +10,8 @@
   "globals": {
     "describe": false,
     "before": false,
-    "it": false
+    "it": false,
+    "global": true,
+    "console": true,
   }
 }

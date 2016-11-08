@@ -16,6 +16,7 @@ if (!process.env.NODE_ENV) {
 var path = require('path');
 var restify = require('restify');
 var bunyan = require('bunyan');
+var rethink = require('rethinkdb');
 
 var nconf = require('nconf').file({
   file: path.join(__dirname, 'config', 'global.json')
@@ -24,40 +25,37 @@ var nconf = require('nconf').file({
 /**
  * Logging
  */
-
 var LogglyStream = require(path.join(__dirname, 'helpers', 'logglyStream.js'));
 var Logger = bunyan.createLogger({
   name: nconf.get('Logging:Name'),
   serializers: {
     req: bunyan.stdSerializers.req,
-    res: bunyan.stdSerializers.res
+    res: bunyan.stdSerializers.res,
   },
   streams: [
     { path: path.join(nconf.get('Logging:Dir'), process.env.NODE_ENV + '-' + nconf.get('Server:Name') + '.log') },
-    { type: 'raw', stream: new LogglyStream() }
-  ]
+    { type: 'raw', stream: new LogglyStream() },
+  ],
 });
 
 /**
  * Server
  */
-
 var server = restify.createServer({
   name: nconf.get('Server:Name'),
   version: nconf.get('Server:DefaultVersion'),
   acceptable: nconf.get('Server:Acceptable'),
-  log: Logger
+  log: Logger,
 });
 
 /**
  * Server plugins
  */
-
 var throttleOptions = {
   rate: nconf.get('Server:ThrottleRate'),
   burst: nconf.get('Server:ThrottleBurst'),
   ip: false,
-  username: true
+  username: true,
 };
 
 var plugins = [
@@ -65,7 +63,7 @@ var plugins = [
   restify.throttle(throttleOptions),
   restify.dateParser(),
   restify.queryParser(),
-  restify.fullResponse()
+  restify.fullResponse(),
 ];
 
 if (nconf.get('Security:UseAuth')) {
@@ -84,15 +82,13 @@ server.use(plugins);
 /**
  * CORS
  */
-
 var corsOptions = {
   origins: nconf.get('CORS:Origins'),
   credentials: nconf.get('CORS:Credentials'),
-  headers: nconf.get('CORS:Headers')
+  headers: nconf.get('CORS:Headers'),
 };
 
 server.pre(restify.CORS(corsOptions));
-
 if (corsOptions.headers.length) {
   server.on('MethodNotAllowed', require(path.join(__dirname, 'helpers', 'corsHelper.js'))());
 }
@@ -100,29 +96,33 @@ if (corsOptions.headers.length) {
 /**
  * Request / Response Logging
  */
-
 server.on('after', restify.auditLogger({
-  log: Logger
+  log: Logger,
 }));
+
+/**
+ * make connection
+ */
+rethink.connect({host: 'localhost', port: 28015}, function(err, conn) {
+  if (err) throw err;
+  console.log('RETHINK CONNECTED !');
+  global.connection = conn;
+});
 
 /**
  * Middleware
  */
-
 var registerRoute = function(route) {
-
   var routeMethod = route.meta.method.toLowerCase();
   var routeName = route.meta.name;
   var routeVersion = route.meta.version;
 
-  route
-    .meta
-    .paths
+  route.meta.paths
     .forEach(function(aPath) {
       var routeMeta = {
         name: routeName,
         path: aPath,
-        version: routeVersion
+        version: routeVersion,
       };
       server[routeMethod](routeMeta, route.middleware);
     });
@@ -136,25 +136,21 @@ var setupMiddleware = function(middlewareName) {
 
 [
   'root',
-  'secret'
-
-  // ... more middleware ... //
+  'secret',
+  'rethinkdb',
 ]
 .forEach(setupMiddleware);
 
 /**
  * Listen
  */
-
 var listen = function(done) {
   server.listen(nconf.get('Server:Port'), function() {
     if (done) {
       return done();
     }
 
-    console.log();
     console.log('%s now listening on %s', nconf.get('App:Name'), server.url);
-    console.log();
   });
 };
 

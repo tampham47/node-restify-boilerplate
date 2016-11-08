@@ -1,6 +1,6 @@
 {
   "App": {
-    "Name": "api-example-com"
+    "Name": "Restify rethinkdb"
   },
   "Server": {
     "Port": 1337,
@@ -80,7 +80,10 @@
           "roles": ["anonymous"],
           "allows": [
             {
-              "resources": "/#1.0.0",
+              "resources": [
+                "/#1.0.0",
+                "/rethink#1.0.0"
+              ],
               "permissions": "get"
             }
           ]
